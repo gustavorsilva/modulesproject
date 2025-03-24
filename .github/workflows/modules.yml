@@ -1,0 +1,68 @@
+name: integracao-ecr-eb
+
+on:
+  workflow_call:
+    inputs:
+      # Se necessário, defina inputs que o workflow receberá
+      # Por exemplo:
+      branch:
+        description: 'Branch que disparará o workflow'
+        required: false
+        default: 'main'
+    secrets:
+      S_GITHUB_TOKEN:
+        required: true
+jobs:
+  check_inserts:
+    runs-on: ubuntu-latest
+    outputs:
+      approval_required: ${{ env.approval_required }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Garante commits suficientes para a comparação
+
+      - name: Get previous commit SHA
+        id: prev-commit
+        run: echo "PREVIOUS_SHA=$(git rev-parse HEAD^1)" >> $GITHUB_ENV
+
+      - name: Count inserted lines
+        id: count_inserts
+        run: |
+          PREVIOUS_SHA=${{ env.PREVIOUS_SHA }}
+          CURRENT_SHA=${{ github.sha }}
+          echo "Previous SHA: $PREVIOUS_SHA"
+          echo "Current SHA: $CURRENT_SHA"
+          INSERTED_LINES=$(git diff --numstat $PREVIOUS_SHA $CURRENT_SHA | awk '{inserted+=$1} END {print inserted}')
+          echo "INSERTED_LINES=$INSERTED_LINES" >> $GITHUB_ENV
+          echo "::set-output name=inserted_lines::$INSERTED_LINES"
+        # Note que, a partir de hoje, o uso de outputs com set-output está depreciado, mas serve de exemplo.
+      
+      - name: Determine if approval is required
+        id: approval_check
+        run: |
+          if [ "${{ steps.count_inserts.outputs.inserted_lines }}" -gt 5 ]; then
+            echo "approval_required=true" >> $GITHUB_ENV
+          else
+            echo "approval_required=false" >> $GITHUB_ENV
+          fi
+        env:
+          inserted_lines: ${{ steps.count_inserts.outputs.inserted_lines }}
+
+  request_approval:
+    runs-on: ubuntu-latest
+    environment: review
+    needs: check_inserts
+    if: ${{ needs.check_inserts.outputs.approval_required == 'true' }}
+    steps:
+      - name: Continue workflow after approval
+        run: echo "Workflow approved. Continuing..."
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [check_inserts, request_approval]
+    if: ${{ needs.check_inserts.outputs.approval_required == 'false' || always() }}
+    steps:
+      - name: Deploy application
+        run: echo "Deploying the application..."
