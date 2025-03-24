@@ -3,12 +3,11 @@ name: integracao-ecr-eb
 on:
   workflow_call:
     inputs:
-      # Se necessário, defina inputs que o workflow receberá
-      # Por exemplo:
       branch:
-        description: 'Branch que disparará o workflow'
+        description: 'Branch que dispara o workflow'
         required: false
-        default: 'main'
+        default: '*'
+        type: string
     secrets:
       S_GITHUB_TOKEN:
         required: true
@@ -37,7 +36,6 @@ jobs:
           INSERTED_LINES=$(git diff --numstat $PREVIOUS_SHA $CURRENT_SHA | awk '{inserted+=$1} END {print inserted}')
           echo "INSERTED_LINES=$INSERTED_LINES" >> $GITHUB_ENV
           echo "::set-output name=inserted_lines::$INSERTED_LINES"
-        # Note que, a partir de hoje, o uso de outputs com set-output está depreciado, mas serve de exemplo.
       
       - name: Determine if approval is required
         id: approval_check
